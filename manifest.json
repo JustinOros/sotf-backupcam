@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToniMacaroni/RedLoader/main/MetadataSchema.json",
+  "id": "BackupCam",
+  "name": "BackupCam",
+  "author": "JustinOros",
+  "version": "1.1.0",
+  "description": "Shows a backup camera when reversing the golf cart",
+  "gameVersion": "1.0.0",
+  "platform": "Client",
+  "type": "Mod"
+}
