@@ -16,7 +16,8 @@ public class BackupCam : SonsMod
 {
     const float ReverseSpeed = -0.4f;
     const float HideDelay = 0.6f;
-    const float SearchInterval = 1f;
+    const float SearchInterval = 0.5f;
+    const float SearchRadius = 2.5f;
     const string ScreenPath = "GolfCartScreen/GolfCartGps/Canvas/ScreenMask";
     const string ScreenImageName = "BackupCamScreen";
 
@@ -51,7 +52,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.1.0 loaded. Reverse the golf cart to show the camera on its GPS screen. Console: backupcamoffset, backupcamdump");
+        RLog.Msg("BackupCam 1.1.1 loaded. Reverse the golf cart to show the camera on its GPS screen. Console: backupcamoffset, backupcamdump");
     }
 
     protected override void OnGameStart()
@@ -117,20 +118,32 @@ public class BackupCam : SonsMod
         _body = null;
         _screenGo = null;
 
-        foreach (var cart in Object.FindObjectsOfType<GolfCartController>())
-        {
-            var body = cart.GetComponentInParent<Rigidbody>();
-            if (body == null) body = cart.GetComponentInChildren<Rigidbody>();
-            if (body == null || !IsInCart(body)) continue;
+        var player = LocalPlayer.Transform;
+        var root = player.root;
+        if (root != player && TryUseCart(root.GetComponentInChildren<GolfCartController>())) return true;
 
-            _cart = cart;
-            _body = body;
-            AttachCamera();
-            AttachScreen();
-            return true;
+        foreach (var col in Physics.OverlapSphere(player.position, SearchRadius, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (col == null) continue;
+            if (TryUseCart(col.GetComponentInParent<GolfCartController>())) return true;
         }
 
         return false;
+    }
+
+    bool TryUseCart(GolfCartController cart)
+    {
+        if (cart == null) return false;
+
+        var body = cart.GetComponentInParent<Rigidbody>();
+        if (body == null) body = cart.GetComponentInChildren<Rigidbody>();
+        if (body == null || !IsInCart(body)) return false;
+
+        _cart = cart;
+        _body = body;
+        AttachCamera();
+        AttachScreen();
+        return true;
     }
 
     bool IsInCart(Rigidbody body)
