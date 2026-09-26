@@ -1,7 +1,7 @@
 # BackupCam
 
-Shows a backup camera on screen while you reverse the golf cart in Sons of the
-Forest.
+Shows a backup camera on the golf cart's GPS screen and turns on rear lights
+while you reverse in Sons of the Forest.
 
 ## Multiplayer
 
@@ -53,9 +53,13 @@ Mods\BackupCam\manifest.json
 
 ## Usage
 
-Get in a golf cart and drive backward. The camera feed appears at the bottom of
-the screen, mirrored like a real backup camera, and hides shortly after you stop
-reversing.
+Get in a golf cart and drive backward. The camera feed replaces the map on the
+cart's GPS screen, mirrored like a real backup camera, and the map comes back
+shortly after you stop reversing. Rear lights also turn on while reversing so
+the camera can see at night. If a cart has no GPS screen, the feed is shown at
+the bottom of your screen instead.
+
+The rear lights and camera are only visible to players who have the mod.
 
 Press F1 to open the console, then use these commands:
 
@@ -63,7 +67,7 @@ Press F1 to open the console, then use these commands:
 | --- | --- |
 | `backupcamoffset` | Show the current camera height, distance and tilt |
 | `backupcamoffset 1.1 -1.3 20` | Set camera height, distance behind the cart, and downward tilt |
-| `backupcamdump` | Write the golf cart's object and material list to `_RedLoader\Latest.log` |
+| `backupcamdump` | Write the golf cart's objects, components and textures to `UserData\BackupCamDump.txt` |
 
 ## Uninstall
 

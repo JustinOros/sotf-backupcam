@@ -20,6 +20,8 @@ public class BackupCam : SonsMod
     const float SearchRadius = 2.5f;
     const string ScreenPath = "GolfCartScreen/GolfCartGps/Canvas/ScreenMask";
     const string ScreenImageName = "BackupCamScreen";
+    const string HeadLightPath = "LightsGroup/HeadLights";
+    const string RearLightName = "BackupCamRearLight";
 
     static readonly string[] TextureProps =
     {
@@ -35,6 +37,7 @@ public class BackupCam : SonsMod
     GameObject _canvasGo;
     RawImage _image;
     GameObject _screenGo;
+    GameObject _rearLightGo;
     float _screenAspect;
     float _searchTimer;
     float _lastReverse = -10f;
@@ -52,7 +55,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.1.1 loaded. Reverse the golf cart to show the camera on its GPS screen. Console: backupcamoffset, backupcamdump");
+        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcamoffset, backupcamdump");
     }
 
     protected override void OnGameStart()
@@ -117,6 +120,7 @@ public class BackupCam : SonsMod
         _cart = null;
         _body = null;
         _screenGo = null;
+        _rearLightGo = null;
 
         var player = LocalPlayer.Transform;
         var root = player.root;
@@ -143,6 +147,7 @@ public class BackupCam : SonsMod
         _body = body;
         AttachCamera();
         AttachScreen();
+        AttachRearLight();
         return true;
     }
 
@@ -213,6 +218,43 @@ public class BackupCam : SonsMod
         _screenAspect = maskRect.height > 0f ? maskRect.width / maskRect.height : 0f;
     }
 
+    void AttachRearLight()
+    {
+        var root = _cart.transform.root;
+        var existing = root.Find(RearLightName);
+        if (existing != null)
+        {
+            _rearLightGo = existing.gameObject;
+            _rearLightGo.SetActive(false);
+            return;
+        }
+
+        var head = root.Find(HeadLightPath);
+        if (head == null)
+        {
+            RLog.Msg("BackupCam: headlights not found on this cart, no rear lights");
+            return;
+        }
+
+        var go = Object.Instantiate(head.gameObject, root);
+        go.name = RearLightName;
+        go.SetActive(false);
+
+        foreach (var c in go.GetComponents<Component>())
+            if (c != null && c.GetIl2CppType().Name == "UL_FastGI")
+                Object.Destroy(c);
+
+        var localPos = root.InverseTransformPoint(head.position);
+        var localRot = Quaternion.Inverse(root.rotation) * head.rotation;
+        go.transform.localPosition = new Vector3(localPos.x, localPos.y, -localPos.z);
+        go.transform.localRotation = Quaternion.AngleAxis(180f, Vector3.up) * localRot;
+
+        var light = go.GetComponent<Light>();
+        if (light != null) light.enabled = true;
+
+        _rearLightGo = go;
+    }
+
     void ApplyOffset()
     {
         if (_cam == null) return;
@@ -228,6 +270,7 @@ public class BackupCam : SonsMod
         var onScreen = _screenGo != null;
         if (_screenGo != null) _screenGo.SetActive(show);
         if (_canvasGo != null) _canvasGo.SetActive(show && !onScreen);
+        if (_rearLightGo != null) _rearLightGo.SetActive(show);
 
         if (_cam == null) return;
         if (onScreen && _screenAspect > 0f) _cam.aspect = _screenAspect;
