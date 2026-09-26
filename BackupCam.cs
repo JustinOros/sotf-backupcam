@@ -22,6 +22,8 @@ public class BackupCam : SonsMod
     const string ScreenImageName = "BackupCamScreen";
     const string HeadLightPath = "LightsGroup/HeadLights";
     const string RearLightName = "BackupCamRearLight";
+    const float ClipScanInterval = 0.2f;
+    const float ClipScanRadius = 8f;
 
     static readonly string[] TextureProps =
     {
@@ -52,6 +54,12 @@ public class BackupCam : SonsMod
     float _lightIntensity = 3f;
     float _lightRange = 1.5f;
 
+    bool _clipping;
+    float _clipTimer;
+    readonly List<Collider> _cartColliders = new();
+    readonly List<Collider> _ignored = new();
+    readonly HashSet<int> _ignoredIds = new();
+
     public BackupCam()
     {
         _instance = this;
@@ -60,7 +68,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcamoffset, backupcamlight, backupcamdump");
+        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcam, backupcamoffset, backupcamlight, backupcamdump");
     }
 
     protected override void OnGameStart()
@@ -115,6 +123,8 @@ public class BackupCam : SonsMod
             if (!FindCart()) return;
         }
 
+        if (_clipping) UpdateClipping();
+
         var localVel = _body.transform.InverseTransformDirection(_body.velocity);
         if (localVel.z < ReverseSpeed) _lastReverse = Time.time;
         SetShowing(Time.time - _lastReverse < HideDelay);
@@ -122,6 +132,7 @@ public class BackupCam : SonsMod
 
     bool FindCart()
     {
+        RestoreCollisions();
         _cart = null;
         _body = null;
         _screenGo = null;
@@ -273,6 +284,48 @@ public class BackupCam : SonsMod
             _rearLight.spotAngle = Mathf.Min(_headLight.spotAngle * 1.25f, 150f);
     }
 
+    void UpdateClipping()
+    {
+        _clipTimer -= Time.deltaTime;
+        if (_clipTimer > 0f) return;
+        _clipTimer = ClipScanInterval;
+
+        var root = _body.transform.root;
+        if (_cartColliders.Count == 0)
+        {
+            foreach (var c in root.GetComponentsInChildren<Collider>(true))
+                if (c != null && !c.isTrigger && c.TryCast<WheelCollider>() == null)
+                    _cartColliders.Add(c);
+        }
+
+        foreach (var other in Physics.OverlapSphere(_body.position, ClipScanRadius, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (other == null || other.isTrigger) continue;
+            if (other.attachedRigidbody != null) continue;
+            if (other.TryCast<TerrainCollider>() != null) continue;
+            if (other.TryCast<CharacterController>() != null) continue;
+            if (other.transform.IsChildOf(root)) continue;
+            if (!_ignoredIds.Add(other.GetInstanceID())) continue;
+
+            foreach (var mine in _cartColliders)
+                if (mine != null) Physics.IgnoreCollision(mine, other, true);
+            _ignored.Add(other);
+        }
+    }
+
+    void RestoreCollisions()
+    {
+        foreach (var other in _ignored)
+        {
+            if (other == null) continue;
+            foreach (var mine in _cartColliders)
+                if (mine != null) Physics.IgnoreCollision(mine, other, false);
+        }
+        _ignored.Clear();
+        _ignoredIds.Clear();
+        _cartColliders.Clear();
+    }
+
     void ApplyOffset()
     {
         if (_cam == null) return;
@@ -294,6 +347,26 @@ public class BackupCam : SonsMod
         if (onScreen && _screenAspect > 0f) _cam.aspect = _screenAspect;
         else _cam.ResetAspect();
         _cam.enabled = show;
+    }
+
+    [DebugCommand("backupcam")]
+    static void MainCommand(string args)
+    {
+        if (_instance == null) return;
+        _instance.HandleMain(args);
+    }
+
+    void HandleMain(string args)
+    {
+        var parts = (args ?? "").ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2 && parts[0] == "clipping" && (parts[1] == "on" || parts[1] == "off"))
+        {
+            _clipping = parts[1] == "on";
+            if (!_clipping) RestoreCollisions();
+            RLog.Msg(_clipping ? "BackupCam clipping on: the cart drives through trees and objects" : "BackupCam clipping off");
+            return;
+        }
+        RLog.Msg($"backupcam clipping <on|off>  current: {(_clipping ? "on" : "off")}");
     }
 
     [DebugCommand("backupcamoffset")]
