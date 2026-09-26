@@ -7,6 +7,7 @@ using SonsSdk;
 using SonsSdk.Attributes;
 using TheForest.Utils;
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
@@ -68,7 +69,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.3.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcam, backupcamoffset, backupcamlight, backupcamdump");
+        RLog.Msg("BackupCam 1.3.1 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcam, backupcamoffset, backupcamlight, backupcamdump");
     }
 
     protected override void OnGameStart()
@@ -187,12 +188,34 @@ public class BackupCam : SonsMod
             _cam.farClipPlane = 200f;
             _cam.targetTexture = _rt;
             _cam.enabled = false;
-            var main = Camera.main;
-            if (main != null) _cam.cullingMask = main.cullingMask;
+            MatchMainCamera();
         }
 
         _cam.transform.SetParent(_body.transform, false);
         ApplyOffset();
+    }
+
+    void MatchMainCamera()
+    {
+        var main = Camera.main;
+        if (main == null) return;
+        _cam.cullingMask = main.cullingMask;
+
+        var mainHd = main.GetComponent<HDAdditionalCameraData>();
+        if (mainHd == null) return;
+
+        var hd = _cam.GetComponent<HDAdditionalCameraData>();
+        if (hd == null) hd = _cam.gameObject.AddComponent<HDAdditionalCameraData>();
+
+        hd.volumeLayerMask = mainHd.volumeLayerMask;
+        hd.probeLayerMask = mainHd.probeLayerMask;
+        hd.antialiasing = mainHd.antialiasing;
+        hd.dithering = mainHd.dithering;
+        hd.stopNaNs = mainHd.stopNaNs;
+        hd.clearColorMode = mainHd.clearColorMode;
+        hd.backgroundColorHDR = mainHd.backgroundColorHDR;
+
+        RLog.Msg($"BackupCam: matched main camera volume mask {mainHd.volumeLayerMask.value}");
     }
 
     void AttachScreen()
@@ -300,17 +323,62 @@ public class BackupCam : SonsMod
 
         foreach (var other in Physics.OverlapSphere(_body.position, ClipScanRadius, ~0, QueryTriggerInteraction.Ignore))
         {
-            if (other == null || other.isTrigger) continue;
-            if (other.attachedRigidbody != null) continue;
-            if (other.TryCast<TerrainCollider>() != null) continue;
-            if (other.TryCast<CharacterController>() != null) continue;
-            if (other.transform.IsChildOf(root)) continue;
+            if (other == null || ClipSkipReason(other, root) != null) continue;
             if (!_ignoredIds.Add(other.GetInstanceID())) continue;
 
             foreach (var mine in _cartColliders)
                 if (mine != null) Physics.IgnoreCollision(mine, other, true);
             _ignored.Add(other);
         }
+    }
+
+    string ClipSkipReason(Collider other, Transform root)
+    {
+        if (other.isTrigger) return "trigger";
+        if (other.transform.IsChildOf(root)) return "part of this cart";
+        if (other.TryCast<TerrainCollider>() != null) return "terrain";
+        if (other.TryCast<CharacterController>() != null) return "player";
+        var rb = other.attachedRigidbody;
+        if (rb != null && !rb.isKinematic) return "physics object";
+        return null;
+    }
+
+    void WriteClipScan()
+    {
+        if (_body == null)
+        {
+            RLog.Msg("BackupCam: get in a golf cart first");
+            return;
+        }
+
+        var root = _body.transform.root;
+        var sb = new StringBuilder();
+        sb.AppendLine($"clipping={(_clipping ? "on" : "off")} cartColliders={_cartColliders.Count} ignored={_ignored.Count}");
+
+        var found = new List<(float dist, string line)>();
+        foreach (var other in Physics.OverlapSphere(_body.position, ClipScanRadius, ~0, QueryTriggerInteraction.Collide))
+        {
+            if (other == null) continue;
+            try
+            {
+                var rb = other.attachedRigidbody;
+                var rbText = rb == null ? "none" : rb.isKinematic ? "kinematic" : "dynamic";
+                var reason = ClipSkipReason(other, root) ?? (_ignoredIds.Contains(other.GetInstanceID()) ? "IGNORED" : "would ignore");
+                var dist = Vector3.Distance(_body.position, other.ClosestPoint(_body.position));
+                var line = $"{dist:F1}m  {other.transform.root.name}/{other.name}  type={other.GetIl2CppType().Name}  layer={LayerMask.LayerToName(other.gameObject.layer)}  rb={rbText}  -> {reason}";
+                found.Add((dist, line));
+            }
+            catch (Exception e)
+            {
+                found.Add((999f, $"error on {other.name}: {e.Message}"));
+            }
+        }
+
+        foreach (var f in found.OrderBy(f => f.dist)) sb.AppendLine(f.line);
+
+        var path = Path.Combine(LoaderEnvironment.UserDataDirectory, "BackupCamClipScan.txt");
+        File.WriteAllText(path, sb.ToString());
+        RLog.Msg($"BackupCam clip scan written to {path}");
     }
 
     void RestoreCollisions()
@@ -359,14 +427,22 @@ public class BackupCam : SonsMod
     void HandleMain(string args)
     {
         var parts = (args ?? "").ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 2 && parts[0] == "clipping" && (parts[1] == "on" || parts[1] == "off"))
+        if (parts.Length == 2 && parts[0] == "clipping")
         {
-            _clipping = parts[1] == "on";
-            if (!_clipping) RestoreCollisions();
-            RLog.Msg(_clipping ? "BackupCam clipping on: the cart drives through trees and objects" : "BackupCam clipping off");
-            return;
+            if (parts[1] == "on" || parts[1] == "off")
+            {
+                _clipping = parts[1] == "on";
+                if (!_clipping) RestoreCollisions();
+                RLog.Msg(_clipping ? "BackupCam clipping on: the cart drives through trees and objects" : "BackupCam clipping off");
+                return;
+            }
+            if (parts[1] == "scan")
+            {
+                WriteClipScan();
+                return;
+            }
         }
-        RLog.Msg($"backupcam clipping <on|off>  current: {(_clipping ? "on" : "off")}");
+        RLog.Msg($"backupcam clipping <on|off|scan>  current: {(_clipping ? "on" : "off")}");
     }
 
     [DebugCommand("backupcamoffset")]
