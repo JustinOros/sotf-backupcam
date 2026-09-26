@@ -68,7 +68,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcam, backupcamoffset, backupcamlight, backupcamdump");
+        RLog.Msg("BackupCam 1.3.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcam, backupcamoffset, backupcamlight, backupcamdump");
     }
 
     protected override void OnGameStart()
