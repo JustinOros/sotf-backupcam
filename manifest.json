@@ -3,7 +3,7 @@
   "id": "BackupCam",
   "name": "BackupCam",
   "author": "JustinOros",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Shows a backup camera when reversing the golf cart",
   "gameVersion": "1.0.0",
   "platform": "Client",

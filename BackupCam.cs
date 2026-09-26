@@ -38,6 +38,8 @@ public class BackupCam : SonsMod
     RawImage _image;
     GameObject _screenGo;
     GameObject _rearLightGo;
+    Light _headLight;
+    Light _rearLight;
     float _screenAspect;
     float _searchTimer;
     float _lastReverse = -10f;
@@ -47,6 +49,9 @@ public class BackupCam : SonsMod
     float _camZ = -1.3f;
     float _camPitch = 20f;
 
+    float _lightIntensity = 3f;
+    float _lightRange = 1.5f;
+
     public BackupCam()
     {
         _instance = this;
@@ -55,7 +60,7 @@ public class BackupCam : SonsMod
 
     protected override void OnSdkInitialized()
     {
-        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcamoffset, backupcamdump");
+        RLog.Msg("BackupCam 1.2.0 loaded. Reverse the golf cart to show the camera on its GPS screen and turn on rear lights. Console: backupcamoffset, backupcamlight, backupcamdump");
     }
 
     protected override void OnGameStart()
@@ -121,6 +126,8 @@ public class BackupCam : SonsMod
         _body = null;
         _screenGo = null;
         _rearLightGo = null;
+        _headLight = null;
+        _rearLight = null;
 
         var player = LocalPlayer.Transform;
         var root = player.root;
@@ -221,38 +228,49 @@ public class BackupCam : SonsMod
     void AttachRearLight()
     {
         var root = _cart.transform.root;
-        var existing = root.Find(RearLightName);
-        if (existing != null)
-        {
-            _rearLightGo = existing.gameObject;
-            _rearLightGo.SetActive(false);
-            return;
-        }
-
         var head = root.Find(HeadLightPath);
         if (head == null)
         {
             RLog.Msg("BackupCam: headlights not found on this cart, no rear lights");
             return;
         }
+        _headLight = head.GetComponent<Light>();
 
-        var go = Object.Instantiate(head.gameObject, root);
-        go.name = RearLightName;
+        var existing = root.Find(RearLightName);
+        GameObject go;
+        if (existing != null)
+        {
+            go = existing.gameObject;
+        }
+        else
+        {
+            go = Object.Instantiate(head.gameObject, root);
+            go.name = RearLightName;
+
+            foreach (var c in go.GetComponents<Component>())
+                if (c != null && c.GetIl2CppType().Name == "UL_FastGI")
+                    Object.Destroy(c);
+
+            var localPos = root.InverseTransformPoint(head.position);
+            var localRot = Quaternion.Inverse(root.rotation) * head.rotation;
+            go.transform.localPosition = new Vector3(localPos.x, localPos.y, -localPos.z);
+            go.transform.localRotation = Quaternion.AngleAxis(180f, Vector3.up) * localRot;
+        }
+
         go.SetActive(false);
-
-        foreach (var c in go.GetComponents<Component>())
-            if (c != null && c.GetIl2CppType().Name == "UL_FastGI")
-                Object.Destroy(c);
-
-        var localPos = root.InverseTransformPoint(head.position);
-        var localRot = Quaternion.Inverse(root.rotation) * head.rotation;
-        go.transform.localPosition = new Vector3(localPos.x, localPos.y, -localPos.z);
-        go.transform.localRotation = Quaternion.AngleAxis(180f, Vector3.up) * localRot;
-
-        var light = go.GetComponent<Light>();
-        if (light != null) light.enabled = true;
-
         _rearLightGo = go;
+        _rearLight = go.GetComponent<Light>();
+        ApplyLight();
+    }
+
+    void ApplyLight()
+    {
+        if (_rearLight == null || _headLight == null) return;
+        _rearLight.enabled = true;
+        _rearLight.intensity = _headLight.intensity * _lightIntensity;
+        _rearLight.range = _headLight.range * _lightRange;
+        if (_rearLight.type == LightType.Spot)
+            _rearLight.spotAngle = Mathf.Min(_headLight.spotAngle * 1.25f, 150f);
     }
 
     void ApplyOffset()
@@ -298,6 +316,27 @@ public class BackupCam : SonsMod
         _camPitch = float.Parse(parts[2], CultureInfo.InvariantCulture);
         ApplyOffset();
         RLog.Msg($"BackupCam offset set to {_camY} {_camZ} {_camPitch}");
+    }
+
+    [DebugCommand("backupcamlight")]
+    static void LightCommand(string args)
+    {
+        if (_instance == null) return;
+        _instance.SetLight(args);
+    }
+
+    void SetLight(string args)
+    {
+        var parts = (args ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2)
+        {
+            RLog.Msg($"backupcamlight <intensity multiplier> <range multiplier>  current: {_lightIntensity} {_lightRange}");
+            return;
+        }
+        _lightIntensity = float.Parse(parts[0], CultureInfo.InvariantCulture);
+        _lightRange = float.Parse(parts[1], CultureInfo.InvariantCulture);
+        ApplyLight();
+        RLog.Msg($"BackupCam rear light set to {_lightIntensity}x intensity, {_lightRange}x range");
     }
 
     [DebugCommand("backupcamdump")]

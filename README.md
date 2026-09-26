@@ -67,6 +67,8 @@ Press F1 to open the console, then use these commands:
 | --- | --- |
 | `backupcamoffset` | Show the current camera height, distance and tilt |
 | `backupcamoffset 1.1 -1.3 20` | Set camera height, distance behind the cart, and downward tilt |
+| `backupcamlight` | Show the current rear light brightness and reach |
+| `backupcamlight 3 1.5` | Set rear light brightness and reach as multiples of the headlights |
 | `backupcamdump` | Write the golf cart's objects, components and textures to `UserData\BackupCamDump.txt` |
 
 ## Uninstall
