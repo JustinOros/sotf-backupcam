@@ -1,5 +1,7 @@
 # BackupCam
 
+[![Downloads](https://img.shields.io/github/downloads/JustinOros/sotf-backupcam/total?label=downloads)](https://github.com/JustinOros/sotf-backupcam/releases) [![Latest](https://img.shields.io/github/v/release/JustinOros/sotf-backupcam?label=latest)](https://github.com/JustinOros/sotf-backupcam/releases/latest)
+
 Shows a backup camera on the golf cart's GPS screen and turns on rear lights
 while you reverse in Sons of the Forest.
 
